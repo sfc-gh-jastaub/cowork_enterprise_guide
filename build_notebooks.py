@@ -8,7 +8,7 @@ cell lists) — it reads no external notebooks or files. Run: python3 build_note
 """
 import json, os, uuid
 
-OUT = "/Users/jacksonstaub/_Code/SUMMIT_FY27_HOLS-main/cowork_enterprise_guide/notebooks"
+OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "notebooks")
 
 def uid():
     return uuid.uuid4().hex[:8]
@@ -1095,10 +1095,10 @@ n05 = [
  sql("brand_cowork", "Go Live: Brand the CoWork Interface",
      f"USE ROLE ACCOUNTADMIN;\n"
      f"ALTER SNOWFLAKE INTELLIGENCE {COOBJ} SET\n"
-     "  BRAND_NAME = 'CoWork Enterprise Demo'\n"
-     "  WELCOME_MESSAGE = 'Welcome to the Enterprise Demo Analyst. Ask about clients, portfolios, trades, and research.'\n"
-     "  ACCENT_COLOR_LIGHT = '#29B5E8'\n"
-     "  ACCENT_COLOR_DARK = '#29B5E8';"),
+     "  BRAND_NAME = 'Nexus Capital'\n"
+     "  WELCOME_MESSAGE = 'Welcome to Nexus Capital Intelligence. Ask about client portfolios, positions, trades, and market research.'\n"
+     "  ACCENT_COLOR_LIGHT = '#0B3D91'\n"
+     "  ACCENT_COLOR_DARK = '#5B9BD5';"),
  md("## Restrict business users to CoWork (reference)\n"
     "Confine non-technical users to the CoWork UI and ensure each has a default role + warehouse. Shown "
     "for reference - we do not lock a real user on a shared account.\n\n"
@@ -1302,7 +1302,19 @@ n08 = [
  sql("remove_prod_from_cowork", "Remove Promoted Agent from CoWork Object",
      f"USE ROLE ACCOUNTADMIN;\n"
      f"ALTER SNOWFLAKE INTELLIGENCE {COOBJ} DROP AGENT {AGENT_PROD};"),
- md("## Step 2: Drop the Demo Objects\n\n🛠️ Drop the budget, quota, and masking policy, then the "
+ md("## Step 2: Reset the CoWork Object Branding\n\n🛠️ The CoWork object "
+    f"(`{COOBJ}`) is a shared singleton. At go-live (Notebook 05) we set its `BRAND_NAME`, "
+    "`WELCOME_MESSAGE`, and accent colours. Because branding is **account-global**, cleanup "
+    "reverts it to Snowflake defaults so no demo branding lingers for other teams.\n\n"
+    "🔹 `UNSET` resets each property to its system default (the object itself is never dropped)."),
+ sql("reset_branding", "Cleanup: Reset CoWork Object Branding to Defaults",
+     "-- Reset the shared CoWork object branding to Snowflake defaults (undoes NB05 go-live branding).\n"
+     f"USE ROLE ACCOUNTADMIN;\n"
+     f"ALTER SNOWFLAKE INTELLIGENCE {COOBJ}\n"
+     "  UNSET BRAND_NAME, WELCOME_MESSAGE, ACCENT_COLOR_LIGHT, ACCENT_COLOR_DARK;\n"
+     f"USE ROLE {ADMIN};\n"
+     "SELECT 'CoWork object branding reset to Snowflake defaults' AS STATUS;"),
+ md("## Step 3: Drop the Demo Objects\n\n🛠️ Drop the budget, quota, and masking policy, then the "
     "database (CASCADE), warehouse, and roles. Dropping the database removes the agents, semantic view, "
     "search service, eval dataset, and stage in one step."),
  sql("drop_budget", "Drop Resource Budgets",
@@ -1319,7 +1331,7 @@ n08 = [
      f"DROP WAREHOUSE IF EXISTS {WH};\n"
      f"DROP ROLE IF EXISTS {SIUSER};\n"
      f"DROP ROLE IF EXISTS {ADMIN};"),
- md("## Step 3: Verify Clean\n\n📌 All should return no rows / gone. The shared CoWork object should "
+ md("## Step 4: Verify Clean\n\n📌 All should return no rows / gone. The shared CoWork object should "
     "still exist (we only removed our agents from it)."),
  sql("verify_db_gone", "Verify: Demo Database Gone", f"SHOW DATABASES LIKE '{DB}';"),
  sql("verify_role_gone", "Verify: Demo Roles Gone", f"SHOW ROLES LIKE 'COWORK_ENTERPRISE_DEMO%';"),
@@ -1327,7 +1339,7 @@ n08 = [
      "SHOW SNOWFLAKE INTELLIGENCES;"),
  md(nb_complete("08",
     ["A clean account — all `COWORK_ENTERPRISE_DEMO*` objects removed",
-     "The shared CoWork object preserved, with our agents detached"],
+     "The shared CoWork object preserved, with our agents detached and its branding reset to Snowflake defaults"],
     ["The demo is fully isolated, so cleanup is a handful of drops plus detaching our agents.",
      "Shared, pre-existing state (CoWork object, PUBLIC grants, guardrails) is never touched."],
     "That's the full lifecycle: context → govern → build → cost → evaluate/go-live → dev→prod → "
