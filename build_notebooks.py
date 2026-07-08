@@ -239,7 +239,7 @@ n00 = [
      "Validates every table loaded and the account is ready to build on"],
     "This Is Phase 0",
     "🔹 In a real engagement, Phase 0 is to **confirm** the estate you already run — RBAC, network "
-    "policies, MFA, masking, cross-region inference (see `PRODUCTION_HARDENING.md`). There is no estate "
+    "policies, MFA, masking, cross-region inference. There is no estate "
     "to confirm in a demo, so this notebook instead **builds a clean sandbox** you can safely tear down "
     "later (Notebook 08).\n\n"
     "**Run order:** 00 → 01 → 02 → 03 → 04 → 05 → 06 (dev→prod) → 07 (continuous improvement), then 08 "
@@ -542,7 +542,7 @@ GRANT SELECT ON ALL TABLES IN SCHEMA COWORK_ENTERPRISE_DEMO.ANALYTICS TO ROLE CO
 SELECT 'SI role created with tiers 1, 3, 4' AS STATUS;"""),
  md("### 📌 Reference only — do NOT run on a shared account\n"
     "For a controlled enterprise rollout you would restrict Cortex to intended roles. We skip this here "
-    "because `CORTEX_USER` is granted to PUBLIC and shared with other teams (see `PRODUCTION_HARDENING.md`).\n\n"
+    "because `CORTEX_USER` is granted to PUBLIC and shared with other teams.\n\n"
     "```sql\n"
     "REVOKE DATABASE ROLE SNOWFLAKE.CORTEX_USER FROM ROLE PUBLIC;\n"
     f"GRANT DATABASE ROLE SNOWFLAKE.CORTEX_AGENT_USER TO ROLE {SIUSER};\n"
@@ -1343,8 +1343,9 @@ n08 = [
     ["The demo is fully isolated, so cleanup is a handful of drops plus detaching our agents.",
      "Shared, pre-existing state (CoWork object, PUBLIC grants, guardrails) is never touched."],
     "That's the full lifecycle: context → govern → build → cost → evaluate/go-live → dev→prod → "
-    "continuous improvement → cleanup. See `PRODUCTION_HARDENING.md` for the account-level hardening "
-    "to run in a real deployment.")),
+    "continuous improvement → cleanup. In a real deployment, also apply account-level hardening "
+    "— network policies, SSO/IdP, SCIM, MFA, PrivateLink, and revoking `CORTEX_USER` from PUBLIC "
+    "— in the customer's own account.")),
 ]
 
 # =====================================================================

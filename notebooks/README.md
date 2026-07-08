@@ -1,7 +1,7 @@
 # CoWork Enterprise Demo — Notebook Series
 
 A runnable, 9-notebook build of the CoWork enterprise production guide
-([../02_GUIDE.md](../02_GUIDE.md)). These are **Snowflake Workspace SQL notebooks**
+([../CoWork_Enterprise_Overview.html](../CoWork_Enterprise_Overview.html)). These are **Snowflake Workspace SQL notebooks**
 (SQL kernel, `%%sql` cells). They stand up a governed Cortex Analyst → Cortex Agent →
 CoWork solution on an **isolated** namespace, then tear it down.
 
@@ -26,7 +26,7 @@ Run **00 → 07 in order** (objects build on each other), then **08** (cleanup) 
 
 > Account-level identity/network hardening (network policies, SSO/IdP, SCIM, MFA, PrivateLink,
 > revoking `CORTEX_USER`/`EXECUTE AGENT TASK` from `PUBLIC`) is intentionally **not** run in these
-> notebooks — see [`../PRODUCTION_HARDENING.md`](../PRODUCTION_HARDENING.md) for that checklist to run
+> notebooks — run that account-level checklist (network policies, SSO/IdP, SCIM, MFA, PrivateLink)
 > in the customer's own account.
 
 ## Prerequisites

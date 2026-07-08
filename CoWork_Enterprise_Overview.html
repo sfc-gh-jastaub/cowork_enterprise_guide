@@ -306,11 +306,11 @@
         <td>Creating/dropping the singleton CoWork object, revoking <code>CORTEX_USER</code> from <code>PUBLIC</code>, changing account guardrails, network policy / SSO / MFA / PrivateLink.</td>
       </tr>
     </table>
-    <p>Account-level hardening that a real deployment must do — but that we don't run on a shared account — is collected in <code>PRODUCTION_HARDENING.md</code>. In a customer's own account, the "reference" operations become runnable; the principle simply says: <strong>never let a demo change state that belongs to someone else.</strong></p>
+    <p>Account-level hardening that a real deployment must do — but that we don't run on a shared account — includes network policies, SSO/IdP, SCIM, MFA, PrivateLink, and revoking <code>CORTEX_USER</code> from <code>PUBLIC</code>. In a customer's own account, the "reference" operations become runnable; the principle simply says: <strong>never let a demo change state that belongs to someone else.</strong></p>
   </section>
 
   <footer>
-    <p><strong>CoWork Enterprise Deployment — Overview.</strong> The narrative companion to the nine hands-on notebooks (<code>Notebook_00</code> → <code>Notebook_08</code>). For the runnable steps, open the notebooks; for the account-hardening checklist, see <code>PRODUCTION_HARDENING.md</code>.</p>
+    <p><strong>CoWork Enterprise Deployment — Overview.</strong> The narrative companion to the nine hands-on notebooks (<code>Notebook_00</code> → <code>Notebook_08</code>). For the runnable steps, open the notebooks; account-level hardening (network policies, SSO/IdP, SCIM, MFA, PrivateLink) is run in the customer's own account.</p>
   </footer>
 
 </div>
