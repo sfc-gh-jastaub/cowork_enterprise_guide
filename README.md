@@ -5,7 +5,7 @@ Snowflake data. This repo is a **production runbook** — not a feature tour —
 agent from raw tables all the way to a governed, cost-controlled, evaluated, business-user-ready
 deployment, delivered as nine runnable **Snowflake Workspace SQL notebooks** (SQL kernel, `%%sql` cells).
 
-Everything runs against a fictional buy-side firm, **"Nexus Capital,"** entirely inside an isolated
+Everything runs against a fictional buy-side firm, **"Strive Capital,"** entirely inside an isolated
 `COWORK_ENTERPRISE_DEMO` database — so it never collides with other objects and tears down cleanly.
 The narrative companion (the *why* behind the sequencing) is
 [`CoWork_Enterprise_Overview.html`](CoWork_Enterprise_Overview.html).
