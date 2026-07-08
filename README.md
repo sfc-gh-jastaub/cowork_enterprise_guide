@@ -76,9 +76,23 @@ shared state:
 - **Per-user quota (NB04)** is created in **monitoring mode only** (no block enforcement, no email
   notifications) so it never blocks or emails anyone on the shared account; it is dropped in NB07.
 
-## Uploading to Snowflake Workspace
+## Running the notebooks in Snowsight
 
-To run in Snowsight, upload each notebook, e.g.:
+The simplest way to run these is a **Git-connected Workspace** — Snowsight syncs this repo directly, so you
+open and run the notebooks in place (and pull updates later) without uploading anything.
+
+1. In Snowsight, go to **Projects » Workspaces**.
+2. Open the Workspaces menu and select **From Git repository**.
+3. Paste the repository URL: `https://github.com/sfc-gh-jastaub/cowork_enterprise_guide`
+4. Select an **API integration** that allows access to the repo (creating one needs `CREATE API INTEGRATION`;
+   otherwise pick one you have `USAGE` on).
+5. For **authentication**, choose **Public repository** — this repo is public, so no secret or token is needed.
+6. Select **Create**, then open the `notebooks/` folder and run **00 → 07** in order, then **08** last.
+
+> Each `.ipynb` runs on the SQL kernel. Set the notebook warehouse to `COWORK_ENTERPRISE_DEMO_WH`
+> (created in Notebook 00) once it exists, or any warehouse you can use for the first run.
+
+**Alternative — upload manually.** If you'd rather not connect Git, upload each notebook via the CLI:
 
 ```bash
 cortex artifact create notebook "CoWork Demo 00 - Lab Setup" "notebooks/Notebook_00_Lab_Setup.ipynb"
