@@ -1,53 +1,14 @@
 #!/usr/bin/env python3
 """Builder for the CoWork Enterprise Demo notebook series.
 
-Reads the proven Summit FY27 E2E_AI_HOL notebooks, re-namespaces them to the
-isolated COWORK_ENTERPRISE_DEMO namespace, fills the lab fill-in-the-blanks,
-strips the exercise comment-boxes, and assembles 7 phase notebooks that mirror
-the CoWork enterprise guide. New governance / cost / go-live / cleanup cells are
-authored fresh here. Notebooks are SQL-kernel Snowflake Workspace notebooks.
+Self-contained: assembles nine SQL-kernel Snowflake Workspace notebooks for the
+CoWork enterprise deployment guide, in the isolated COWORK_ENTERPRISE_DEMO
+namespace. All SQL is defined in this file (see the INLINE dict and the n00-n08
+cell lists) — it reads no external notebooks or files. Run: python3 build_notebooks.py
 """
 import json, os, uuid
 
-SRC = "/Users/jacksonstaub/_Code/SUMMIT_FY27_HOLS-main/E2E_AI_HOL/notebooks"
 OUT = "/Users/jacksonstaub/_Code/SUMMIT_FY27_HOLS-main/cowork_enterprise_guide/notebooks"
-
-_src_cache = {}
-def load(fn):
-    if fn not in _src_cache:
-        _src_cache[fn] = json.load(open(os.path.join(SRC, fn)))
-    return _src_cache[fn]
-
-def cell_src(fn, name):
-    for c in load(fn)["cells"]:
-        if c.get("metadata", {}).get("name") == name:
-            s = c["source"]
-            return "".join(s) if isinstance(s, list) else s
-    raise KeyError(f"{fn}:{name}")
-
-BOX = set("╔╗╚╝║═")
-def clean_boxes(s):
-    return "\n".join(l for l in s.splitlines() if not any(ch in l for ch in BOX))
-
-def ns(s):
-    reps = [
-        ("NEXUS_HOL", "COWORK_ENTERPRISE_DEMO"),
-        ("NEXUS_CAPITAL_SV", "DEMO_SV"),
-        ("NEXUS_RESEARCH_SEARCH", "DEMO_SEARCH"),
-        ("NEXUS_AGENT", "DEMO_AGENT"),
-        ("NEXUS_SI_USER", "COWORK_ENTERPRISE_DEMO_SI_USER"),
-        ("NEXUS_ADMIN", "COWORK_ENTERPRISE_DEMO_ADMIN"),
-        ("NEXUS_WH", "COWORK_ENTERPRISE_DEMO_WH"),
-    ]
-    for a, b in reps:
-        s = s.replace(a, b)
-    return s
-
-def body(src):
-    """Strip the leading %%sql magic line from a reused cell."""
-    if src.startswith("%%sql"):
-        return src.split("\n", 1)[1] if "\n" in src else ""
-    return src
 
 def uid():
     return uuid.uuid4().hex[:8]
@@ -68,7 +29,7 @@ ICONS = "_Icons used throughout: 🛠️ Action  📌 Note  🔹 Info_"
 def nb_header(topic, num, title, does, why_title, why, est, prereqs):
     """Rich HOL-style header cell: What This Does / Why It Matters / Time / Prereqs."""
     out = [f"# CoWork Enterprise Demo — {topic}",
-           f"## Notebook {num} — {title}", "", ICONS, "", "---", "",
+           f"## Notebook {num} — {title}", "", ICONS, "", '> ⚠️ _Generated from `build_notebooks.py` — edit the builder and re-run. Direct edits to this notebook are overwritten._', "", "---", "",
            "### What This Notebook Does:", ""]
     out += [f"{i}. 🛠️ {d}" for i, d in enumerate(does, 1)]
     out += ["", "---", "", f"### Why {why_title}:", "", why, "", "---", "",
@@ -84,16 +45,6 @@ def nb_complete(num, built, points, nxt):
     out += [f"- {p}" for p in points]
     out += ["", "---", "", "### Next:", "", nxt]
     return "\n".join(out)
-
-def reuse(fn, cell, fills=None, strip_boxes=True):
-    s = cell_src(fn, cell)
-    s = body(s)
-    if strip_boxes:
-        s = clean_boxes(s)
-    s = ns(s)
-    for a, b in (fills or []):
-        s = s.replace(a, b)
-    return s
 
 def write_nb(fname, cells):
     nb = {"cells": cells,
@@ -116,18 +67,26 @@ SEARCH = f"{DB}.AGENTS.DEMO_SEARCH"
 SEARCH_CLIENT = f"{DB}.AGENTS.DEMO_CLIENT_SEARCH"
 COOBJ = "SNOWFLAKE_INTELLIGENCE_OBJECT_DEFAULT"
 
-SV_FILLS = [("positions(XXX)", "positions(CLIENT_ID)"),
-            ("trades(XXX)", "trades(CLIENT_ID)"),
-            ("STATUS = ''XXX''", "STATUS = ''ACTIVE''"),
-            # Attach a Cortex Search service to the high-cardinality CLIENT_NAME
-            # dimension for fuzzy literal matching (e.g. "Acme" -> "Acme Capital LLC").
-            ("    clients.CLIENT_NAME AS CLIENT_NAME\n      COMMENT = 'Full name of the client account',",
-             "    clients.CLIENT_NAME AS CLIENT_NAME\n"
-             "      COMMENT = 'Full name of the client account'\n"
-             f"      WITH CORTEX SEARCH SERVICE {SEARCH_CLIENT},")]
-SEARCH_FILLS = [("ON XXX", "ON CONTENT")]
-AGENT_FILLS = [('semantic_view: "XXX"', f'semantic_view: "{SV}"'),
-               ('warehouse: "XXX"', f'warehouse: "{WH}"')]
+# --- Inlined SQL (self-contained; no external notebook dependencies) ---
+INLINE = {
+    'CreateRole': "USE ROLE ACCOUNTADMIN;\n\n-- Create lab role\nCREATE ROLE IF NOT EXISTS COWORK_ENTERPRISE_DEMO_ADMIN\n  COMMENT = 'Summit 2026 HOL - Nexus Capital lab role';\n\n-- Grant role to current user and ACCOUNTADMIN\nGRANT ROLE COWORK_ENTERPRISE_DEMO_ADMIN TO ROLE ACCOUNTADMIN;\n\nSELECT 'COWORK_ENTERPRISE_DEMO_ADMIN role created and granted' AS STATUS;",
+    'CreateWH': "-- Create warehouse\nCREATE WAREHOUSE IF NOT EXISTS COWORK_ENTERPRISE_DEMO_WH\n  WAREHOUSE_SIZE = 'XSMALL'\n  AUTO_SUSPEND = 60\n  AUTO_RESUME = TRUE\n  INITIALLY_SUSPENDED = TRUE\n  COMMENT = 'Summit 2026 HOL - Nexus Capital compute';\n\n-- Grant usage to COWORK_ENTERPRISE_DEMO_ADMIN\nGRANT USAGE ON WAREHOUSE COWORK_ENTERPRISE_DEMO_WH TO ROLE COWORK_ENTERPRISE_DEMO_ADMIN;\nGRANT OPERATE ON WAREHOUSE COWORK_ENTERPRISE_DEMO_WH TO ROLE COWORK_ENTERPRISE_DEMO_ADMIN;\n\nSELECT 'COWORK_ENTERPRISE_DEMO_WH warehouse created (XS, auto-suspend 60s)' AS STATUS;",
+    'EnableCrossRegionInference': "-- Enable cross-region inference (Global for best cost and model access)\nALTER ACCOUNT SET CORTEX_ENABLED_CROSS_REGION = 'ANY_REGION';\n\nSHOW PARAMETERS LIKE 'CORTEX_ENABLED_CROSS_REGION' IN ACCOUNT;\n\nSELECT 'Cross-region inference enabled (ANY_REGION)' AS STATUS;",
+    'UseNew': 'USE ROLE COWORK_ENTERPRISE_DEMO_ADMIN;\nUSE DATABASE COWORK_ENTERPRISE_DEMO;\nUSE SCHEMA ANALYTICS;\nUSE WAREHOUSE COWORK_ENTERPRISE_DEMO_WH;',
+    'CreateTables': "-- CLIENTS table: Client master data\nCREATE OR REPLACE TABLE COWORK_ENTERPRISE_DEMO.ANALYTICS.CLIENTS (\n    CLIENT_ID           NUMBER AUTOINCREMENT PRIMARY KEY,\n    CLIENT_NAME         VARCHAR(100) NOT NULL,\n    ACCOUNT_TYPE        VARCHAR(20) NOT NULL,      -- INSTITUTIONAL, RETAIL, HNW\n    REGION              VARCHAR(30) NOT NULL,\n    AUM                 NUMBER(15,2),              -- Assets Under Management\n    RISK_PROFILE        VARCHAR(20),               -- CONSERVATIVE, MODERATE, AGGRESSIVE\n    ONBOARDED_DATE      DATE NOT NULL,\n    RELATIONSHIP_MANAGER VARCHAR(50),\n    EMAIL               VARCHAR(100),\n    STATUS              VARCHAR(20) DEFAULT 'ACTIVE'\n);\n\n-- POSITIONS table: Current portfolio positions\nCREATE OR REPLACE TABLE COWORK_ENTERPRISE_DEMO.ANALYTICS.POSITIONS (\n    POSITION_ID         NUMBER AUTOINCREMENT PRIMARY KEY,\n    CLIENT_ID           NUMBER NOT NULL,\n    SYMBOL              VARCHAR(10) NOT NULL,\n    QUANTITY            NUMBER NOT NULL,\n    AVG_COST            NUMBER(12,4) NOT NULL,\n    CURRENT_PRICE       NUMBER(12,4),\n    MARKET_VALUE        NUMBER(15,2),\n    UNREALIZED_PNL      NUMBER(15,2),\n    SECTOR              VARCHAR(30),\n    LAST_UPDATED        TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP()\n);\n\n-- TRADES table: Recent trade executions\nCREATE OR REPLACE TABLE COWORK_ENTERPRISE_DEMO.ANALYTICS.TRADES (\n    TRADE_ID            NUMBER AUTOINCREMENT PRIMARY KEY,\n    CLIENT_ID           NUMBER NOT NULL,\n    SYMBOL              VARCHAR(10) NOT NULL,\n    TRADE_TYPE          VARCHAR(4) NOT NULL,       -- BUY or SELL\n    QUANTITY            NUMBER NOT NULL,\n    PRICE               NUMBER(12,4) NOT NULL,\n    TRADE_DATE          TIMESTAMP_NTZ NOT NULL DEFAULT CURRENT_TIMESTAMP(),\n    SETTLEMENT_DATE     DATE,\n    STATUS              VARCHAR(20) DEFAULT 'EXECUTED',\n    EXCHANGE            VARCHAR(10) DEFAULT 'NYSE',\n    NOTES               VARCHAR(500)\n);\n\n-- DAILY_METRICS table: Aggregated daily business metrics\nCREATE OR REPLACE TABLE COWORK_ENTERPRISE_DEMO.ANALYTICS.DAILY_METRICS (\n    METRIC_DATE         DATE NOT NULL,\n    TOTAL_AUM           NUMBER(18,2),\n    TOTAL_CLIENTS       NUMBER,\n    ACTIVE_CLIENTS      NUMBER,\n    TOTAL_TRADES        NUMBER,\n    TRADE_VOLUME_USD    NUMBER(18,2),\n    NET_FLOWS           NUMBER(15,2),\n    TOTAL_REVENUE       NUMBER(15,2),\n    AVG_PORTFOLIO_RISK  NUMBER(5,3),\n    TOP_SECTOR          VARCHAR(30)\n);\n\nSELECT 'Analytics tables created' AS STATUS;",
+    'LoadClientData': "-- Load client data\nINSERT INTO COWORK_ENTERPRISE_DEMO.ANALYTICS.CLIENTS (CLIENT_NAME, ACCOUNT_TYPE, REGION, AUM, RISK_PROFILE, ONBOARDED_DATE, RELATIONSHIP_MANAGER, EMAIL, STATUS)\nVALUES\n('Meridian Pension Fund', 'INSTITUTIONAL', 'North America', 2500000000.00, 'MODERATE', '2019-03-15', 'Sarah Chen', 'contact@meridianpf.com', 'ACTIVE'),\n('Atlas Sovereign Wealth', 'INSTITUTIONAL', 'EMEA', 8700000000.00, 'CONSERVATIVE', '2017-08-22', 'James Morrison', 'invest@atlasswf.com', 'ACTIVE'),\n('Velocity Capital Partners', 'INSTITUTIONAL', 'North America', 1200000000.00, 'AGGRESSIVE', '2020-01-10', 'Sarah Chen', 'ops@velocitycap.com', 'ACTIVE'),\n('Sakura Asset Management', 'INSTITUTIONAL', 'APJ', 3100000000.00, 'MODERATE', '2018-11-05', 'Kenji Tanaka', 'info@sakura-am.jp', 'ACTIVE'),\n('Nordic Growth Fund', 'INSTITUTIONAL', 'EMEA', 950000000.00, 'AGGRESSIVE', '2021-06-18', 'Erik Lindqvist', 'invest@nordicgf.se', 'ACTIVE'),\n('Wellington Family Office', 'HNW', 'North America', 450000000.00, 'MODERATE', '2016-02-28', 'Sarah Chen', 'pw@wellingtonfamily.com', 'ACTIVE'),\n('Horizon Endowment', 'INSTITUTIONAL', 'North America', 1800000000.00, 'CONSERVATIVE', '2015-09-12', 'Michael Brooks', 'endowment@horizonedu.org', 'ACTIVE'),\n('Pacific Rim Ventures', 'INSTITUTIONAL', 'APJ', 2200000000.00, 'AGGRESSIVE', '2019-07-30', 'Kenji Tanaka', 'invest@pacificrimv.sg', 'ACTIVE'),\n('Blackstone Ridge Capital', 'HNW', 'North America', 680000000.00, 'AGGRESSIVE', '2022-03-01', 'Michael Brooks', 'admin@blackstoneridge.com', 'ACTIVE'),\n('Emirates Diversified Holdings', 'INSTITUTIONAL', 'EMEA', 5400000000.00, 'MODERATE', '2018-01-20', 'James Morrison', 'invest@emiratesdh.ae', 'ACTIVE'),\n('Redwood Retirement Systems', 'INSTITUTIONAL', 'North America', 4100000000.00, 'CONSERVATIVE', '2014-05-15', 'Sarah Chen', 'ops@redwoodretire.com', 'ACTIVE'),\n('Chen Wei Holdings', 'HNW', 'APJ', 320000000.00, 'MODERATE', '2021-11-22', 'Kenji Tanaka', 'office@chenwei.hk', 'ACTIVE');\n\nSELECT 'Clients loaded: ' || COUNT(*) || ' rows' AS STATUS FROM COWORK_ENTERPRISE_DEMO.ANALYTICS.CLIENTS;",
+    'LoadPortfolioPositions': "-- Load portfolio positions\nINSERT INTO COWORK_ENTERPRISE_DEMO.ANALYTICS.POSITIONS (CLIENT_ID, SYMBOL, QUANTITY, AVG_COST, CURRENT_PRICE, MARKET_VALUE, UNREALIZED_PNL, SECTOR)\nVALUES\n(1, 'AAPL', 50000, 145.2300, 198.5000, 9925000.00, 2663500.00, 'Technology'),\n(1, 'MSFT', 35000, 280.5000, 425.3000, 14885500.00, 5068000.00, 'Technology'),\n(1, 'JNJ', 40000, 155.8000, 162.4000, 6496000.00, 264000.00, 'Healthcare'),\n(2, 'BRK.B', 25000, 310.0000, 465.2000, 11630000.00, 3880000.00, 'Financials'),\n(2, 'PG', 60000, 138.5000, 168.9000, 10134000.00, 1824000.00, 'Consumer Staples'),\n(2, 'XOM', 45000, 85.6000, 112.3000, 5053500.00, 1201500.00, 'Energy'),\n(3, 'NVDA', 80000, 42.5000, 135.8000, 10864000.00, 7464000.00, 'Technology'),\n(3, 'TSLA', 30000, 185.0000, 248.5000, 7455000.00, 1905000.00, 'Consumer Discretionary'),\n(3, 'AMD', 55000, 95.3000, 168.7000, 9278500.00, 4037000.00, 'Technology'),\n(4, 'SONY', 90000, 78.5000, 95.2000, 8568000.00, 1503000.00, 'Technology'),\n(4, 'TM', 40000, 155.0000, 182.4000, 7296000.00, 1096000.00, 'Consumer Discretionary'),\n(5, 'ASML', 12000, 580.0000, 890.5000, 10686000.00, 3726000.00, 'Technology'),\n(5, 'SPOT', 25000, 145.0000, 328.6000, 8215000.00, 4590000.00, 'Technology'),\n(6, 'AAPL', 20000, 130.0000, 198.5000, 3970000.00, 1370000.00, 'Technology'),\n(6, 'V', 15000, 220.0000, 295.8000, 4437000.00, 1137000.00, 'Financials'),\n(7, 'VTI', 100000, 195.0000, 268.4000, 26840000.00, 7340000.00, 'Broad Market'),\n(7, 'BND', 80000, 72.5000, 69.8000, 5584000.00, -216000.00, 'Fixed Income'),\n(8, 'BABA', 120000, 88.0000, 125.3000, 15036000.00, 4476000.00, 'Technology'),\n(8, 'SE', 65000, 52.0000, 98.5000, 6402500.00, 3022500.00, 'Technology'),\n(9, 'COIN', 35000, 65.0000, 225.4000, 7889000.00, 5614000.00, 'Financials'),\n(9, 'MSTR', 18000, 320.0000, 1650.0000, 29700000.00, 23940000.00, 'Technology'),\n(10, 'ADNOC', 200000, 3.2000, 4.1000, 820000.00, 180000.00, 'Energy'),\n(10, 'SAP', 30000, 145.0000, 235.6000, 7068000.00, 2718000.00, 'Technology'),\n(11, 'VTI', 150000, 180.0000, 268.4000, 40260000.00, 13260000.00, 'Broad Market'),\n(11, 'SCHD', 200000, 72.0000, 82.5000, 16500000.00, 2100000.00, 'Dividends'),\n(12, 'TCEHY', 50000, 42.0000, 58.3000, 2915000.00, 815000.00, 'Technology'),\n(12, '9988.HK', 80000, 72.5000, 108.2000, 8656000.00, 2856000.00, 'Technology');\n\nSELECT 'Positions loaded: ' || COUNT(*) || ' rows' AS STATUS FROM COWORK_ENTERPRISE_DEMO.ANALYTICS.POSITIONS;",
+    'LoadRecentTrades': "-- Load recent trades\nINSERT INTO COWORK_ENTERPRISE_DEMO.ANALYTICS.TRADES (CLIENT_ID, SYMBOL, TRADE_TYPE, QUANTITY, PRICE, TRADE_DATE, SETTLEMENT_DATE, STATUS, EXCHANGE, NOTES)\nVALUES\n(1, 'AAPL', 'BUY', 5000, 197.80, DATEADD('hour', -2, CURRENT_TIMESTAMP()), DATEADD('day', 2, CURRENT_DATE()), 'EXECUTED', 'NASDAQ', 'Adding to core tech position'),\n(1, 'MSFT', 'BUY', 2000, 424.50, DATEADD('hour', -3, CURRENT_TIMESTAMP()), DATEADD('day', 2, CURRENT_DATE()), 'EXECUTED', 'NASDAQ', 'Pre-earnings accumulation'),\n(3, 'NVDA', 'SELL', 10000, 136.20, DATEADD('hour', -1, CURRENT_TIMESTAMP()), DATEADD('day', 2, CURRENT_DATE()), 'EXECUTED', 'NASDAQ', 'Profit taking after run-up'),\n(3, 'TSLA', 'BUY', 8000, 247.90, DATEADD('hour', -4, CURRENT_TIMESTAMP()), DATEADD('day', 2, CURRENT_DATE()), 'EXECUTED', 'NASDAQ', 'Momentum entry'),\n(2, 'XOM', 'SELL', 5000, 111.80, DATEADD('hour', -5, CURRENT_TIMESTAMP()), DATEADD('day', 2, CURRENT_DATE()), 'EXECUTED', 'NYSE', 'Reducing energy exposure'),\n(5, 'ASML', 'BUY', 2000, 892.00, DATEADD('minute', -30, CURRENT_TIMESTAMP()), DATEADD('day', 2, CURRENT_DATE()), 'EXECUTED', 'NASDAQ', 'Semiconductor thesis'),\n(4, 'SONY', 'BUY', 15000, 94.80, DATEADD('hour', -6, CURRENT_TIMESTAMP()), DATEADD('day', 2, CURRENT_DATE()), 'EXECUTED', 'NYSE', 'Gaming sector exposure'),\n(9, 'COIN', 'BUY', 10000, 224.50, DATEADD('minute', -45, CURRENT_TIMESTAMP()), DATEADD('day', 2, CURRENT_DATE()), 'EXECUTED', 'NASDAQ', 'Crypto proxy play'),\n(6, 'V', 'BUY', 3000, 294.20, DATEADD('hour', -7, CURRENT_TIMESTAMP()), DATEADD('day', 2, CURRENT_DATE()), 'EXECUTED', 'NYSE', 'Payments thesis'),\n(8, 'SE', 'SELL', 20000, 99.10, DATEADD('hour', -2, CURRENT_TIMESTAMP()), DATEADD('day', 2, CURRENT_DATE()), 'EXECUTED', 'NYSE', 'Taking profits on SE Asia tech'),\n(7, 'BND', 'BUY', 25000, 69.90, DATEADD('hour', -8, CURRENT_TIMESTAMP()), DATEADD('day', 2, CURRENT_DATE()), 'EXECUTED', 'NYSE', 'Rebalancing fixed income allocation'),\n(10, 'SAP', 'BUY', 5000, 236.10, DATEADD('hour', -3, CURRENT_TIMESTAMP()), DATEADD('day', 2, CURRENT_DATE()), 'EXECUTED', 'NYSE', 'Enterprise software conviction'),\n(11, 'SCHD', 'BUY', 30000, 82.30, DATEADD('day', -1, CURRENT_TIMESTAMP()), DATEADD('day', 1, CURRENT_DATE()), 'SETTLED', 'NYSE', 'Dividend reinvestment'),\n(12, 'TCEHY', 'BUY', 10000, 57.80, DATEADD('day', -1, CURRENT_TIMESTAMP()), DATEADD('day', 1, CURRENT_DATE()), 'SETTLED', 'OTC', 'China tech rebound thesis'),\n(1, 'JNJ', 'SELL', 10000, 163.00, DATEADD('day', -1, CURRENT_TIMESTAMP()), DATEADD('day', 1, CURRENT_DATE()), 'SETTLED', 'NYSE', 'Trimming healthcare overweight'),\n(3, 'AMD', 'BUY', 12000, 167.50, DATEADD('minute', -90, CURRENT_TIMESTAMP()), DATEADD('day', 2, CURRENT_DATE()), 'EXECUTED', 'NASDAQ', 'AI infrastructure play'),\n(5, 'SPOT', 'SELL', 5000, 330.00, DATEADD('hour', -4, CURRENT_TIMESTAMP()), DATEADD('day', 2, CURRENT_DATE()), 'EXECUTED', 'NYSE', 'Locking in gains'),\n(2, 'PG', 'BUY', 10000, 169.20, DATEADD('hour', -5, CURRENT_TIMESTAMP()), DATEADD('day', 2, CURRENT_DATE()), 'EXECUTED', 'NYSE', 'Defensive positioning'),\n(4, 'TM', 'SELL', 8000, 183.00, DATEADD('hour', -6, CURRENT_TIMESTAMP()), DATEADD('day', 2, CURRENT_DATE()), 'EXECUTED', 'NYSE', 'Rotating out of auto'),\n(9, 'MSTR', 'BUY', 3000, 1645.00, DATEADD('minute', -20, CURRENT_TIMESTAMP()), DATEADD('day', 2, CURRENT_DATE()), 'EXECUTED', 'NASDAQ', 'Bitcoin proxy - high conviction');\n\nSELECT 'Trades loaded: ' || COUNT(*) || ' rows' AS STATUS FROM COWORK_ENTERPRISE_DEMO.ANALYTICS.TRADES;",
+    'LoadDailyMetrics': "-- Load daily metrics (last 30 days of aggregated business metrics)\nINSERT INTO COWORK_ENTERPRISE_DEMO.ANALYTICS.DAILY_METRICS (METRIC_DATE, TOTAL_AUM, TOTAL_CLIENTS, ACTIVE_CLIENTS, TOTAL_TRADES, TRADE_VOLUME_USD, NET_FLOWS, TOTAL_REVENUE, AVG_PORTFOLIO_RISK, TOP_SECTOR)\nSELECT\n    DATEADD('day', -seq4(), CURRENT_DATE()) AS METRIC_DATE,\n    31400000000.00 + (RANDOM() % 500000000) AS TOTAL_AUM,\n    12 AS TOTAL_CLIENTS,\n    CASE WHEN seq4() % 7 = 0 THEN 10 ELSE 12 END AS ACTIVE_CLIENTS,\n    15 + (ABS(RANDOM()) % 20) AS TOTAL_TRADES,\n    25000000.00 + (ABS(RANDOM()) % 50000000) AS TRADE_VOLUME_USD,\n    -5000000.00 + (ABS(RANDOM()) % 10000000) AS NET_FLOWS,\n    850000.00 + (ABS(RANDOM()) % 300000) AS TOTAL_REVENUE,\n    0.45 + (ABS(RANDOM()) % 20) / 100.0 AS AVG_PORTFOLIO_RISK,\n    CASE (ABS(RANDOM()) % 4)\n        WHEN 0 THEN 'Technology'\n        WHEN 1 THEN 'Financials'\n        WHEN 2 THEN 'Energy'\n        ELSE 'Healthcare'\n    END AS TOP_SECTOR\nFROM TABLE(GENERATOR(ROWCOUNT => 30));\n\nSELECT 'Daily metrics loaded: ' || COUNT(*) || ' rows' AS STATUS FROM COWORK_ENTERPRISE_DEMO.ANALYTICS.DAILY_METRICS;",
+    'CreateUnstructuredData': "-- Research notes and market commentary (for Cortex Search)\nCREATE OR REPLACE TABLE COWORK_ENTERPRISE_DEMO.ANALYTICS.RESEARCH_NOTES (\n    NOTE_ID         NUMBER AUTOINCREMENT PRIMARY KEY,\n    TITLE           VARCHAR(200) NOT NULL,\n    CONTENT         VARCHAR(5000) NOT NULL,\n    AUTHOR          VARCHAR(50),\n    CATEGORY        VARCHAR(30),\n    PUBLISHED_DATE  DATE,\n    REGION          VARCHAR(30),\n    SYMBOLS_MENTIONED VARCHAR(200)\n);\n\nINSERT INTO COWORK_ENTERPRISE_DEMO.ANALYTICS.RESEARCH_NOTES (TITLE, CONTENT, AUTHOR, CATEGORY, PUBLISHED_DATE, REGION, SYMBOLS_MENTIONED)\nVALUES\n('Q2 Technology Sector Outlook', 'The technology sector continues to benefit from AI infrastructure buildout. NVIDIA remains the primary beneficiary of data center GPU demand, with hyperscaler capex showing no signs of deceleration. We maintain overweight positions in semiconductor names (NVDA, AMD, ASML) and see further upside in AI-adjacent software companies. Risk: elevated valuations leave limited margin of safety if earnings disappoint.', 'Sarah Chen', 'Market Commentary', CURRENT_DATE() - 5, 'North America', 'NVDA,AMD,ASML'),\n('Emerging Markets Risk Assessment', 'Geopolitical tensions in the South China Sea and ongoing US-China trade restrictions create headwinds for APJ equity exposure. However, Japanese equities (SONY, TM) benefit from yen weakness and corporate governance reforms. We recommend selective positioning in Japan while maintaining caution on Greater China names. Sakura Asset Management has expressed interest in increasing Japan allocation.', 'Kenji Tanaka', 'Risk Assessment', CURRENT_DATE() - 3, 'APJ', 'SONY,TM,TCEHY,BABA'),\n('Fixed Income Rebalancing Strategy', 'With rate cuts expected in H2, we recommend gradually extending duration in fixed income portfolios. Horizon Endowment and Redwood Retirement Systems should consider shifting from short-duration BND positions to intermediate-term corporates. The yield curve normalization thesis supports this move. Current BND position shows unrealized loss of $216K — acceptable given the strategic rationale.', 'Michael Brooks', 'Strategy', CURRENT_DATE() - 7, 'North America', 'BND,SCHD'),\n('EMEA Energy Transition Update', 'European energy majors are accelerating renewable investments. Emirates Diversified Holdings should maintain XOM exposure for dividend yield but consider adding renewable energy ETFs for long-term positioning. SAP enterprise software adoption continues to accelerate across EMEA — strong conviction on the digital transformation thesis.', 'James Morrison', 'Sector Update', CURRENT_DATE() - 2, 'EMEA', 'XOM,SAP'),\n('Crypto and Digital Assets Thesis', 'Bitcoin proxy plays (COIN, MSTR) have outperformed direct crypto holdings on a risk-adjusted basis. Blackstone Ridge Capital has generated exceptional returns on MSTR position (+$23.9M unrealized). We recommend maintaining but not increasing allocation — concentration risk is elevated. Consider taking partial profits if MSTR exceeds $1,800.', 'Michael Brooks', 'Thematic Research', CURRENT_DATE() - 1, 'North America', 'COIN,MSTR'),\n('Client Portfolio Compliance Review - May 2026', 'Monthly compliance check complete. All portfolios within risk mandate boundaries. One flagged item: Velocity Capital Partners TSLA position approaching 15% single-name concentration limit after recent BUY order (8,000 shares at $247.90). Recommend monitoring and potential trim if position exceeds threshold. No other policy breaches detected across 12 active accounts.', 'Compliance Team', 'Compliance', CURRENT_DATE(), 'North America', 'TSLA'),\n('Nordic Growth Fund - Quarterly Review', 'Nordic Growth Fund continues to outperform benchmark with aggressive tech allocation (ASML, SPOT). ASML position has generated $3.7M unrealized gains on semiconductor thesis. Spotify gains reflect subscriber growth exceeding expectations. Fund manager Erik Lindqvist has requested exploration of AI infrastructure names — recommend presenting NVDA and AMD analysis at next quarterly meeting.', 'Erik Lindqvist', 'Client Review', CURRENT_DATE() - 10, 'EMEA', 'ASML,SPOT,NVDA,AMD'),\n('Pacific Rim Ventures - Rotation Strategy', 'Client has requested rotation out of SE Asia tech (SE position) into broader AI plays. The $3M+ unrealized gain on SE provides tax-loss harvesting opportunity if paired with appropriate offset. Recommend phased exit over 2 weeks to minimize market impact. Replacement candidates: BABA (already held), or new positions in Korean AI chip names.', 'Kenji Tanaka', 'Trading Strategy', CURRENT_DATE() - 4, 'APJ', 'SE,BABA');\n\nSELECT 'Research notes loaded: ' || COUNT(*) || ' rows' AS STATUS FROM COWORK_ENTERPRISE_DEMO.ANALYTICS.RESEARCH_NOTES;",
+    'ValidateSetup': "-- Validate all tables and row counts\nSELECT 'CLIENTS' AS TABLE_NAME, COUNT(*) AS ROW_COUNT FROM COWORK_ENTERPRISE_DEMO.ANALYTICS.CLIENTS\nUNION ALL\nSELECT 'POSITIONS', COUNT(*) FROM COWORK_ENTERPRISE_DEMO.ANALYTICS.POSITIONS\nUNION ALL\nSELECT 'TRADES', COUNT(*) FROM COWORK_ENTERPRISE_DEMO.ANALYTICS.TRADES\nUNION ALL\nSELECT 'DAILY_METRICS', COUNT(*) FROM COWORK_ENTERPRISE_DEMO.ANALYTICS.DAILY_METRICS\nUNION ALL\nSELECT 'RESEARCH_NOTES', COUNT(*) FROM COWORK_ENTERPRISE_DEMO.ANALYTICS.RESEARCH_NOTES\nORDER BY TABLE_NAME;",
+    'SanityCheck': '-- Quick sanity check: Top 5 clients by AUM\nSELECT CLIENT_NAME, ACCOUNT_TYPE, REGION, AUM, RISK_PROFILE\nFROM COWORK_ENTERPRISE_DEMO.ANALYTICS.CLIENTS\nORDER BY AUM DESC\nLIMIT 5;',
+    'VerifyCrossRegion': "-- Verify cross-region inference is enabled\nSHOW PARAMETERS LIKE 'CORTEX_ENABLED_CROSS_REGION' IN ACCOUNT;",
+    'CreateSemanticView': 'CREATE OR REPLACE SEMANTIC VIEW COWORK_ENTERPRISE_DEMO.SEMANTIC.DEMO_SV\n\n  TABLES (\n    clients AS COWORK_ENTERPRISE_DEMO.ANALYTICS.CLIENTS\n      PRIMARY KEY (CLIENT_ID)\n      COMMENT = \'Client master data including institutional and HNW accounts with AUM and risk profiles\',\n\n    positions AS COWORK_ENTERPRISE_DEMO.ANALYTICS.POSITIONS\n      PRIMARY KEY (POSITION_ID)\n      COMMENT = \'Current portfolio positions by client and symbol with market values and unrealized PnL\',\n\n    trades AS COWORK_ENTERPRISE_DEMO.ANALYTICS.TRADES\n      PRIMARY KEY (TRADE_ID)\n      COMMENT = \'Trade execution history including buy/sell orders with prices, quantities, and status\'\n  )\n\n  RELATIONSHIPS (\n    positions_to_clients AS\n      positions(CLIENT_ID) REFERENCES clients,\n    trades_to_clients AS\n      trades(CLIENT_ID) REFERENCES clients\n  )\n\n  FACTS (\n    clients.AUM AS AUM\n      COMMENT = \'Assets Under Management in USD. Total value of assets the client has with Nexus Capital.\',\n    positions.POSITION_QUANTITY AS QUANTITY\n      COMMENT = \'Number of shares held in the position\',\n    positions.AVG_COST AS AVG_COST\n      COMMENT = \'Average cost basis per share for the position\',\n    positions.CURRENT_PRICE AS CURRENT_PRICE\n      COMMENT = \'Current market price per share\',\n    positions.MARKET_VALUE AS MARKET_VALUE\n      COMMENT = \'Current market value of the position (quantity * current_price)\',\n    positions.UNREALIZED_PNL AS UNREALIZED_PNL\n      COMMENT = \'Unrealized profit or loss on the position (market_value - cost_basis). Positive = gain, negative = loss.\',\n    trades.TRADE_QUANTITY AS QUANTITY\n      COMMENT = \'Number of shares in the trade order\',\n    trades.TRADE_PRICE AS PRICE\n      COMMENT = \'Execution price per share for the trade\'\n  )\n\n  DIMENSIONS (\n    clients.CLIENT_NAME AS CLIENT_NAME\n      COMMENT = \'Full name of the client account\'\n      WITH CORTEX SEARCH SERVICE COWORK_ENTERPRISE_DEMO.AGENTS.DEMO_CLIENT_SEARCH,\n    clients.ACCOUNT_TYPE AS ACCOUNT_TYPE\n      COMMENT = \'Account classification: INSTITUTIONAL, HNW (High Net Worth), or RETAIL\',\n    clients.REGION AS REGION\n      COMMENT = \'Geographic region: North America, EMEA, or APJ\',\n    clients.RISK_PROFILE AS RISK_PROFILE\n      COMMENT = \'Investment risk tolerance: CONSERVATIVE, MODERATE, or AGGRESSIVE\',\n    clients.RELATIONSHIP_MANAGER AS RELATIONSHIP_MANAGER\n      COMMENT = \'Name of the assigned relationship manager\',\n    clients.STATUS AS STATUS\n      COMMENT = \'Client account status: ACTIVE or INACTIVE\',\n    clients.ONBOARDED_DATE AS ONBOARDED_DATE\n      COMMENT = \'Date the client was onboarded\',\n\n    positions.SYMBOL AS SYMBOL\n      COMMENT = \'Stock ticker symbol (e.g., AAPL, NVDA, MSFT)\',\n    positions.SECTOR AS SECTOR\n      COMMENT = \'Market sector classification (Technology, Financials, Energy, Healthcare, etc.)\',\n\n    trades.TRADE_TYPE AS TRADE_TYPE\n      COMMENT = \'Direction of the trade: BUY or SELL\',\n    trades.TRADE_STATUS AS STATUS\n      COMMENT = \'Trade execution status: EXECUTED or SETTLED\',\n    trades.EXCHANGE AS EXCHANGE\n      COMMENT = \'Exchange where trade was executed (NYSE, NASDAQ, OTC)\',\n    trades.TRADE_DATE AS TRADE_DATE\n      COMMENT = \'Timestamp when the trade was executed\',\n    trades.TRADE_NOTES AS NOTES\n      COMMENT = \'Trader notes explaining the rationale for the trade\'\n  )\n\n  METRICS (\n    clients.TOTAL_AUM AS SUM(clients.AUM)\n      COMMENT = \'Total Assets Under Management across all clients in USD\',\n\n    clients.CLIENT_COUNT AS COUNT(DISTINCT CLIENT_ID)\n      COMMENT = \'Number of distinct client accounts\',\n\n    positions.TOTAL_PORTFOLIO_VALUE AS SUM(positions.MARKET_VALUE)\n      COMMENT = \'Total current market value across all positions in USD\',\n\n    positions.TOTAL_UNREALIZED_PNL AS SUM(positions.UNREALIZED_PNL)\n      COMMENT = \'Total unrealized profit/loss across all positions. Positive = overall portfolio gains.\',\n\n    positions.POSITION_COUNT AS COUNT(DISTINCT POSITION_ID)\n      COMMENT = \'Number of distinct portfolio positions\',\n\n    positions.AVG_POSITION_VALUE AS AVG(positions.MARKET_VALUE)\n      COMMENT = \'Average market value per position\',\n\n    trades.TRADE_COUNT AS COUNT(DISTINCT TRADE_ID)\n      COMMENT = \'Number of trade executions\',\n\n    trades.TOTAL_TRADE_VOLUME AS SUM(trades.TRADE_QUANTITY * trades.TRADE_PRICE)\n      COMMENT = \'Total dollar volume of trades (quantity * price summed across all trades)\'\n  )\n\n  COMMENT = \'Nexus Capital - Financial analytics semantic view covering clients, positions, and trades\'\n\n  AI_SQL_GENERATION \'\n    -- Business rules for SQL generation:\n    -- 1. When asked about "top clients" or "biggest clients", rank by AUM unless otherwise specified.\n    -- 2. When asked about portfolio performance, use UNREALIZED_PNL. Positive = gains.\n    -- 3. Default time filter: if no date specified, include all available data.\n    -- 4. "Active clients" means STATUS = \'\'ACTIVE\'\'.\n    -- 5. When asked about "recent trades", order by TRADE_DATE DESC and limit to last 7 days unless specified.\n    -- 6. Trade volume = QUANTITY * PRICE. Always compute as dollar volume, not share count.\n    -- 7. For region breakdowns, use the CLIENTS.REGION column (North America, EMEA, APJ).\n    -- 8. When computing concentration, use MARKET_VALUE / total portfolio MARKET_VALUE.\n  \'\n\n  AI_VERIFIED_QUERIES (\n    top_clients_by_aum AS (\n      QUESTION \'What are our top 5 clients by AUM?\'\n      SQL \'SELECT CLIENT_NAME, ACCOUNT_TYPE, REGION, AUM, RISK_PROFILE\n      FROM COWORK_ENTERPRISE_DEMO.ANALYTICS.CLIENTS\n      WHERE STATUS = \'\'ACTIVE\'\'\n      ORDER BY AUM DESC\n      LIMIT 5\'\n    ),\n\n    portfolio_value_by_sector AS (\n      QUESTION \'What is the total portfolio value by sector?\'\n      SQL \'SELECT p.SECTOR, SUM(p.MARKET_VALUE) AS TOTAL_VALUE, SUM(p.UNREALIZED_PNL) AS TOTAL_PNL\n      FROM COWORK_ENTERPRISE_DEMO.ANALYTICS.POSITIONS p\n      GROUP BY p.SECTOR\n      ORDER BY TOTAL_VALUE DESC\'\n    ),\n\n    recent_large_buy_trades AS (\n      QUESTION \'Show me recent buy trades over $1M in value\'\n      SQL \'SELECT c.CLIENT_NAME, t.SYMBOL, t.QUANTITY, t.PRICE, (t.QUANTITY * t.PRICE) AS TRADE_VALUE, t.TRADE_DATE, t.NOTES\n      FROM COWORK_ENTERPRISE_DEMO.ANALYTICS.TRADES t\n      JOIN COWORK_ENTERPRISE_DEMO.ANALYTICS.CLIENTS c ON t.CLIENT_ID = c.CLIENT_ID\n      WHERE t.TRADE_TYPE = \'\'BUY\'\' AND (t.QUANTITY * t.PRICE) > 1000000\n      ORDER BY t.TRADE_DATE DESC\'\n    ),\n\n    clients_highest_unrealized_gains AS (\n      QUESTION \'Which clients have the highest unrealized gains?\'\n      SQL \'SELECT c.CLIENT_NAME, c.ACCOUNT_TYPE, SUM(p.UNREALIZED_PNL) AS TOTAL_UNREALIZED_PNL, SUM(p.MARKET_VALUE) AS TOTAL_PORTFOLIO_VALUE\n      FROM COWORK_ENTERPRISE_DEMO.ANALYTICS.CLIENTS c\n      JOIN COWORK_ENTERPRISE_DEMO.ANALYTICS.POSITIONS p ON c.CLIENT_ID = p.CLIENT_ID\n      GROUP BY c.CLIENT_NAME, c.ACCOUNT_TYPE\n      ORDER BY TOTAL_UNREALIZED_PNL DESC\'\n    ),\n\n    aum_breakdown_by_region AS (\n      QUESTION \'What is our AUM breakdown by region?\'\n      SQL \'SELECT REGION, COUNT(*) AS CLIENT_COUNT, SUM(AUM) AS TOTAL_AUM, AVG(AUM) AS AVG_AUM\n      FROM COWORK_ENTERPRISE_DEMO.ANALYTICS.CLIENTS\n      WHERE STATUS = \'\'ACTIVE\'\'\n      GROUP BY REGION\n      ORDER BY TOTAL_AUM DESC\'\n    ),\n\n    tech_sector_exposure AS (\n      QUESTION \'Show me the technology sector exposure across all clients\'\n      SQL \'SELECT c.CLIENT_NAME, p.SYMBOL, p.QUANTITY, p.MARKET_VALUE, p.UNREALIZED_PNL\n      FROM COWORK_ENTERPRISE_DEMO.ANALYTICS.POSITIONS p\n      JOIN COWORK_ENTERPRISE_DEMO.ANALYTICS.CLIENTS c ON p.CLIENT_ID = c.CLIENT_ID\n      WHERE p.SECTOR = \'\'Technology\'\'\n      ORDER BY p.MARKET_VALUE DESC\'\n    )\n  );\n\nSELECT \'Semantic view DEMO_SV created successfully\' AS STATUS;',
+    'CreateCortexSearchService': "CREATE OR REPLACE CORTEX SEARCH SERVICE COWORK_ENTERPRISE_DEMO.AGENTS.DEMO_SEARCH\n  ON CONTENT\n  ATTRIBUTES TITLE, AUTHOR, CATEGORY, REGION, SYMBOLS_MENTIONED\n  WAREHOUSE = COWORK_ENTERPRISE_DEMO_WH\n  TARGET_LAG = '1 hour'\n  COMMENT = 'Search service over Nexus Capital research notes, market commentary, and compliance reports'\nAS (\n  SELECT\n    NOTE_ID,\n    TITLE,\n    CONTENT,\n    AUTHOR,\n    CATEGORY,\n    REGION,\n    SYMBOLS_MENTIONED,\n    PUBLISHED_DATE\n  FROM COWORK_ENTERPRISE_DEMO.ANALYTICS.RESEARCH_NOTES\n);\n\nSELECT 'Cortex Search service DEMO_SEARCH created' AS STATUS;",
+    'TestAgent': '-- Test 1: Client ranking (uses Cortex Analyst → semantic view → SQL)\nSELECT\n  TRY_PARSE_JSON(\n    SNOWFLAKE.CORTEX.DATA_AGENT_RUN(\n      \'COWORK_ENTERPRISE_DEMO.AGENTS.DEMO_AGENT\',\n      $${\n        "messages": [\n          {\n            "role": "user",\n            "content": [\n              { "type": "text", "text": "Who are our top 5 clients by AUM and what regions are they in?" }\n            ]\n          }\n        ],\n        "stream": false\n      }$$\n    )\n  ) AS resp;',
+}
+
 
 # Prod-promotion target (Notebook 06) - a separate, prod-scoped schema in the demo DB.
 AGENT_PROD = f"{DB}.AGENTS_PROD.DEMO_AGENT"
@@ -291,7 +250,7 @@ n00 = [
  md("## Step 1: Create the Lab Role\n\n"
     "🛠️ A dedicated role (`COWORK_ENTERPRISE_DEMO_ADMIN`) owns everything we build, so the whole demo "
     "can be granted and dropped as a unit — and nothing runs as `ACCOUNTADMIN` that doesn't have to."),
- sql("create_role", "Create Lab Role", reuse("Notebook_01_HOL_Setup.ipynb", "CreateRole")),
+ sql("create_role", "Create Lab Role", INLINE["CreateRole"]),
  md("## Step 2: Create the Database & Schemas\n\n"
     "🛠️ Three schemas separate concerns: **ANALYTICS** (raw/gold tables), **SEMANTIC** (the governed "
     "semantic view), and **AGENTS** (the agent, search service, budgets). Ownership is transferred to "
@@ -309,7 +268,7 @@ SELECT 'Database and schemas created' AS STATUS;"""),
     "The grants give the lab role exactly what it needs to create semantic views, search services, "
     "agents, and tables — nothing more.\n\n"
     "🔹 `SNOWFLAKE.CORTEX_USER` is the database role that entitles a role to call Cortex AI features."),
- sql("create_wh", "Create Warehouse", reuse("Notebook_01_HOL_Setup.ipynb", "CreateWH")),
+ sql("create_wh", "Create Warehouse", INLINE["CreateWH"]),
  sql("grant_privileges", "Grant Privileges", """-- Focused privileges for the demo admin role
 GRANT DATABASE ROLE SNOWFLAKE.CORTEX_USER TO ROLE COWORK_ENTERPRISE_DEMO_ADMIN;
 GRANT CREATE SEMANTIC VIEW ON SCHEMA COWORK_ENTERPRISE_DEMO.SEMANTIC TO ROLE COWORK_ENTERPRISE_DEMO_ADMIN;
@@ -322,25 +281,25 @@ SELECT 'Privileges granted' AS STATUS;"""),
     "🔹 Cortex may route a request to an LLM hosted in another region. This account-level setting "
     "permits that (required for some models and for evaluations). It is a **safe no-op** if already set."),
  sql("enable_cross_region", "Enable Cross-Region Inference (no-op if already set)",
-     reuse("Notebook_01_HOL_Setup.ipynb", "EnableCrossRegionInference")),
+     INLINE["EnableCrossRegionInference"]),
  md("## Step 5: Load the Sample Data\n\n"
     "🛠️ Sets working context, then creates and loads the *Nexus Capital* dataset: **clients, portfolio "
     "positions, recent trades, daily metrics** (structured) plus **research notes** (unstructured, for "
     "Cortex Search). This is the data every later notebook builds on."),
- sql("use_context", "Set Working Context", reuse("Notebook_01_HOL_Setup.ipynb", "UseNew")),
- sql("create_tables", "Create Analytics Tables", reuse("Notebook_01_HOL_Setup.ipynb", "CreateTables")),
- sql("load_clients", "Load Client Data", reuse("Notebook_01_HOL_Setup.ipynb", "LoadClientData")),
- sql("load_positions", "Load Portfolio Positions", reuse("Notebook_01_HOL_Setup.ipynb", "LoadPortfolioPositions")),
- sql("load_trades", "Load Recent Trades", reuse("Notebook_01_HOL_Setup.ipynb", "LoadRecentTrades")),
- sql("load_metrics", "Load Daily Metrics", reuse("Notebook_01_HOL_Setup.ipynb", "LoadDailyMetrics")),
+ sql("use_context", "Set Working Context", INLINE["UseNew"]),
+ sql("create_tables", "Create Analytics Tables", INLINE["CreateTables"]),
+ sql("load_clients", "Load Client Data", INLINE["LoadClientData"]),
+ sql("load_positions", "Load Portfolio Positions", INLINE["LoadPortfolioPositions"]),
+ sql("load_trades", "Load Recent Trades", INLINE["LoadRecentTrades"]),
+ sql("load_metrics", "Load Daily Metrics", INLINE["LoadDailyMetrics"]),
  sql("load_research", "Create & Load Research Notes (unstructured)",
-     reuse("Notebook_01_HOL_Setup.ipynb", "CreateUnstructuredData")),
+     INLINE["CreateUnstructuredData"]),
  md("## Step 6: Validate\n\n📌 Confirm every table loaded and cross-region inference is set before "
     "moving on — later notebooks assume this data exists."),
- sql("validate_setup", "Validate: Row Counts", reuse("Notebook_01_HOL_Setup.ipynb", "ValidateSetup")),
- sql("sanity_check", "Sanity Check: Top Clients", reuse("Notebook_01_HOL_Setup.ipynb", "SanityCheck")),
+ sql("validate_setup", "Validate: Row Counts", INLINE["ValidateSetup"]),
+ sql("sanity_check", "Sanity Check: Top Clients", INLINE["SanityCheck"]),
  sql("verify_cross_region", "Verify Cross-Region Inference",
-     reuse("Notebook_01_HOL_Setup.ipynb", "VerifyCrossRegion")),
+     INLINE["VerifyCrossRegion"]),
  md(nb_complete("00",
     ["Lab role `COWORK_ENTERPRISE_DEMO_ADMIN` + database `COWORK_ENTERPRISE_DEMO` with ANALYTICS / "
      "SEMANTIC / AGENTS schemas",
@@ -420,7 +379,7 @@ n01 = [
     "matching from Step 2. A single Cortex Analyst call operates against **one** semantic view, so keep "
     "tightly-related tables together (as here) and split genuinely distinct domains into separate views."),
  sql("create_semantic_view", "Create Semantic View",
-     reuse("Notebook_02_Semantic_Layer.ipynb", "CreateSemanticView", SV_FILLS)),
+     INLINE["CreateSemanticView"]),
  md("### 🔹 Best Practices: What Makes a Semantic View Accurate\n\n"
     "Snowflake's [semantic-view best practices]"
     "(https://www.snowflake.com/en/developers/guides/best-practices-semantic-views-cortex-analyst/) "
@@ -487,7 +446,7 @@ n01 = [
     "literal matching; **this** indexes *document bodies* for semantic retrieval. Both are Cortex Search, "
     "used for different jobs."),
  sql("create_search_service", "Create Cortex Search Service",
-     reuse("Notebook_02_Semantic_Layer.ipynb", "CreateCortexSearchService", SEARCH_FILLS)),
+     INLINE["CreateCortexSearchService"]),
  md("## Step 5: Validate (the pre-agent gate)\n\n"
     "📌 **Test the semantic view directly with `SEMANTIC_VIEW()` before building the agent.** If the "
     "view returns wrong numbers, the agent will too — catch it here, not in front of a business user."),
@@ -768,7 +727,7 @@ n03 = [
     "**ground** its answer in the semantic view and cite its source.\n\n"
     "📌 Faster iteration: **AI & ML → Agents → DEMO_AGENT → Test** gives a chat UI with no JSON."),
  sql("test_agent", "Test: Ask the Agent",
-     reuse("Notebook_03_Cortex_Agent.ipynb", "TestAgent")),
+     INLINE["TestAgent"]),
  md("### 🔹 A Note on `DATA_AGENT_RUN` Output\n\n"
     "`SNOWFLAKE.CORTEX.DATA_AGENT_RUN` returns the agent's response as a **string**. Three patterns show "
     "up in practice:\n\n"
